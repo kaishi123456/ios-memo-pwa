@@ -1,78 +1,74 @@
 import streamlit as st
-import json
-import os
-from datetime import datetime
 
-# 页面配置（必须放在最前面）
+# -------------------------- 页面基础设置 --------------------------
 st.set_page_config(
-    page_title="备忘录",
-    page_icon="📝",
+    page_title="快捷工具",
+    page_icon="📱",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# 初始化会话状态数据
-def load_memos():
-    if "memos" not in st.session_state:
-        st.session_state["memos"] = []
-    return st.session_state["memos"]
-
-def save_memos(memos):
-    st.session_state["memos"] = memos
-
-memos = load_memos()
-
-# 仿苹果备忘录CSS样式
-st.markdown("""
-<style>
-body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background-color: #F2F2F7;
-}
-.stButton>button {
-    background-color: #007AFF;
-    color: white;
-    border-radius: 8px;
-}
-.delete-btn>button {
-    background-color: #FF3B30;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# 侧边栏
+# -------------------------- 侧边栏：功能选择 --------------------------
 with st.sidebar:
-    st.markdown("# 📝 备忘录")
-    st.divider()
-    if st.button("➕ 新建笔记", use_container_width=True):
-        now = datetime.now().strftime("%Y-%m-%d %H:%M")
-        memos.append({"title": "新笔记", "content": "", "time": now})
-        save_memos(memos)
-        st.rerun()
-    st.divider()
-    if memos:
-        selected_idx = st.radio("笔记列表", range(len(memos)), format_func=lambda i: memos[i]["title"])
-    else:
-        st.info("暂无笔记")
-        selected_idx = None
+    st.title("📋 功能选择")
+    page = st.radio(
+        "请选择功能",
+        ["短信快捷入口", "备忘录"],
+        index=0
+    )
 
-# 主编辑区
-if memos and selected_idx is not None:
-    current = memos[selected_idx]
-    title = st.text_input("标题", value=current["title"], label_visibility="collapsed")
-    content = st.text_area("内容", value=current["content"], height=500, label_visibility="collapsed")
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("💾 保存", use_container_width=True):
-            memos[selected_idx]["title"] = title
-            memos[selected_idx]["content"] = content
-            memos[selected_idx]["time"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-            save_memos(memos)
-            st.success("已保存！")
-    with col2:
-        if st.button("🗑️ 删除", use_container_width=True, key="del"):
-            memos.pop(selected_idx)
-            save_memos(memos)
-            st.rerun()
-else:
-    st.info("👈 点击左侧「新建笔记」开始使用")
+# -------------------------- 页面1：短信快捷入口 --------------------------
+if page == "短信快捷入口":
+    st.title("📱 短信快捷入口")
+    st.markdown("""
+    1.  把手机号粘贴到下方文本框，**一行一个**
+    2.  粘贴后会自动生成可点击链接
+    3.  点击号码，iPhone 会直接唤起短信界面
+    """)
+    
+    # 手机号输入框
+    phone_text = st.text_area(
+        "粘贴手机号（一行一个）",
+        placeholder="例如：\n18125434594\n18276415554\n18744721968",
+        height=300
+    )
+    
+    st.divider()
+    
+    # 处理手机号并生成链接
+    if phone_text:
+        phone_list = [line.strip() for line in phone_text.splitlines() if line.strip()]
+        st.subheader("点击号码发送短信")
+        
+        for num in phone_list:
+            # 使用 sms: 协议，点击后直接跳转到短信界面
+            st.markdown(
+                f'''
+                <a href=" " style="
+                    color:#007AFF;
+                    font-size:18px;
+                    text-decoration:none;
+                    display:block;
+                    padding:12px 16px;
+                    border-bottom:1px solid #eee;
+                    background-color:#f8f9fa;
+                    border-radius:8px;
+                    margin:8px 0;
+                ">{num}</a >
+                ''',
+                unsafe_allow_html=True
+            )
+
+# -------------------------- 页面2：备忘录 --------------------------
+elif page == "备忘录":
+    st.title("📝 备忘录")
+    
+    # 简单的备忘录功能（你原来的功能）
+    note_title = st.text_input("笔记标题", placeholder="给笔记起个名字...")
+    note_content = st.text_area("笔记内容", placeholder="在这里写你的笔记...", height=300)
+    
+    if st.button("保存笔记", use_container_width=True):
+        if note_title and note_content:
+            st.success(f"✅ 笔记「{note_title}」已保存！")
+        else:
+            st.warning("⚠️ 请填写标题和内容再保存")
