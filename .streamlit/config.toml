@@ -1,1 +1,14 @@
+[server]
+headless = true
+port = 8501
 
+[theme]
+base = "light"
+primaryColor = "#007AFF"
+backgroundColor = "#F2F2F7"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#000000"
+
+[browser]
+gatherUsageStats = false
+clientStorage = true  # 开启本地存储，笔记数据存在浏览器里
