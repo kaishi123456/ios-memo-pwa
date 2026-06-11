@@ -1,336 +1,254 @@
 import streamlit as st
 import re
+import os
+import json
+from datetime import datetime
 
-# ---------------------- 全局样式：1:1还原苹果备忘录+iMessage界面 ----------------------
+# ===================== 全局配置 & 样式（1:1 iOS 备忘录风格）=====================
+st.set_page_config(page_title="仿苹果备忘录", layout="wide")
+
+# 数据目录初始化
+DATA_DIR = "memo_data"
+if not os.path.exists(DATA_DIR):
+    os.mkdir(DATA_DIR)
+MEMO_FILE = os.path.join(DATA_DIR, "memos.json")
+
+# 初始化数据
+def init_data():
+    if not os.path.exists(MEMO_FILE):
+        with open(MEMO_FILE, "w", encoding="utf-8") as f:
+            json.dump({"folders": ["默认文件夹"], "memos": []}, f, ensure_ascii=False, indent=2)
+
+def load_data():
+    with open(MEMO_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def save_data(data):
+    with open(MEMO_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+init_data()
+data = load_data()
+
+# 会话状态初始化
+if "curr_folder" not in st.session_state:
+    st.session_state.curr_folder = "默认文件夹"
+if "curr_memo_id" not in st.session_state:
+    st.session_state.curr_memo_id = None
+if "page" not in st.session_state:
+    st.session_state.page = "list"  # list / edit / menu
+
+# ===================== iOS 原生样式 CSS =====================
 st.markdown("""
 <style>
-/* 全局重置 */
-* {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+* {font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;}
+.main {background: #ffffff;}
+.sidebar .block-container {background: #f7f7f9;}
+
+/* 圆形图标按钮 */
+.ios-icon-btn {
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:44px;
+    height:44px;
+    border-radius:50%;
+    background:#f2f2f7;
+    font-size:20px;
+    color:#007aff;
+    cursor:pointer;
 }
-.main {
-    background-color: #ffffff;
-    padding: 10px;
+.ios-icon-group {
+    display:inline-flex;
+    gap:20px;
+    background:#f2f2f7;
+    border-radius:22px;
+    padding:8px 16px;
+    font-size:20px;
+    color:#007aff;
 }
 
-/* 顶部导航栏 */
-.nav-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 0;
-    margin-bottom: 10px;
-}
-/* 圆形图标按钮（返回/编辑） */
-.icon-btn-circle {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background-color: #f5f5f5;
-    border-radius: 50%;
-    border: none;
-    width: 44px;
-    height: 44px;
-    font-size: 20px;
-    color: #111;
-    cursor: pointer;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-}
-/* 顶部右侧按钮组（分享+更多） */
-.icon-btn-group {
-    display: inline-flex;
-    align-items: center;
-    background-color: #f5f5f5;
-    border-radius: 22px;
-    padding: 8px 16px;
-    gap: 24px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-}
-.icon-btn-group span {
-    font-size: 20px;
-    color: #111;
-}
-
-/* 备忘录文本编辑区 */
+/* 文本编辑区 无边框 */
 .stTextArea textarea {
-    border: none !important;
-    box-shadow: none !important;
-    font-size: 17px;
-    padding: 10px;
-    min-height: 600px;
-    width: 100%;
-    background-color: transparent;
+    border:none !important;
+    box-shadow:none !important;
+    font-size:17px;
+    min-height:600px;
+    background:transparent !important;
 }
 
 /* 底部工具栏 */
-.bottom-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 0;
-    margin-top: 10px;
+.bottom-tool {
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:10px 0;
 }
-/* 底部左侧功能图标组 */
-.bottom-icons {
-    display: inline-flex;
-    align-items: center;
-    background-color: #f5f5f5;
-    border-radius: 22px;
-    padding: 10px 24px;
-    gap: 32px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-}
-.bottom-icons span {
-    font-size: 22px;
-    color: #111;
+.tool-group {
+    display:inline-flex;
+    gap:30px;
+    background:#f2f2f7;
+    border-radius:22px;
+    padding:10px 24px;
+    font-size:22px;
+    color:#007aff;
 }
 
-/* 仿iOS手机号操作菜单 */
-.phone-menu-container {
-    background-color: #f8f8f8;
-    border-radius: 16px;
-    padding: 12px;
-    margin: 10px 0;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
-    max-width: 300px;
+/* iOS 弹出菜单 */
+.ios-menu {
+    background:#f2f2f7;
+    border-radius:16px;
+    padding:12px;
+    box-shadow:0 4px 20px rgba(0,0,0,0.15);
+    max-width:320px;
 }
-.phone-header {
-    display: flex;
-    align-items: center;
-    padding: 8px;
-    margin-bottom: 8px;
+.menu-item {
+    padding:12px 8px;
+    border-bottom:1px solid #e5e5ea;
+    font-size:16px;
+    cursor:pointer;
 }
-.phone-avatar {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    background-color: #ccc;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 24px;
-    color: #fff;
-    margin-right: 12px;
-}
-.phone-menu-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 8px;
-    border-bottom: 1px solid #e0e0e0;
-    cursor: pointer;
-}
-.phone-menu-item:last-child {
-    border-bottom: none;
-}
-.phone-menu-item span {
-    font-size: 16px;
-}
+.menu-item:last-child {border:none;}
 
-/* 仿iMessage短信界面 */
-.sms-container {
-    background-color: #fff;
-    border-radius: 16px 16px 0 0;
-    padding: 20px;
-    box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+/* 笔记列表项 */
+.memo-item {
+    padding:12px;
+    border-bottom:1px solid #e5e5ea;
+    cursor:pointer;
 }
-.sms-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-}
-.sms-header h3 {
-    margin: 0;
-    font-weight: 500;
-}
-.sms-header .cancel-btn {
-    color: #007aff;
-    font-size: 16px;
-    cursor: pointer;
-}
-.recipient-box {
-    padding: 12px;
-    border-bottom: 1px solid #e0e0e0;
-    margin-bottom: 20px;
-}
-.recipient-label {
-    color: #888;
-    font-size: 14px;
-    margin-bottom: 4px;
-}
-.recipient-number {
-    font-size: 16px;
-    color: #007aff;
-}
-.sender-select {
-    padding: 12px;
-    border-bottom: 1px solid #e0e0e0;
-    margin-bottom: 30px;
-}
-.message-input {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px;
-    background-color: #f5f5f5;
-    border-radius: 20px;
-    margin-top: 20px;
-}
-.message-input input {
-    flex: 1;
-    border: none;
-    background-color: transparent;
-    font-size: 16px;
-    outline: none;
-}
+.memo-item:hover {background:#f2f2f7;}
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------------- 会话状态初始化 ----------------------
-if "page_state" not in st.session_state:
-    st.session_state.page_state = "memo"  # 状态：memo/menu/sms
-if "selected_phone" not in st.session_state:
-    st.session_state.selected_phone = None
-if "sms_content" not in st.session_state:
-    st.session_state.sms_content = ""
+# ===================== 工具函数：手机号识别 =====================
+PHONE_REG = re.compile(r"1[3-9]\d{9}")
 
-# ---------------------- 1. 备忘录主界面 ----------------------
-if st.session_state.page_state == "memo":
-    # 顶部导航栏
+# ===================== 页面1：笔记列表页 =====================
+if st.session_state.page == "list":
+    # 顶部导航
     col1, col2 = st.columns([1, 1])
     with col1:
-        st.markdown("""
-        <div class="nav-bar">
-            <div class="icon-btn-circle">←</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown('<div class="ios-icon-btn">←</div>', unsafe_allow_html=True)
     with col2:
-        st.markdown("""
-        <div class="nav-bar" style="justify-content: flex-end;">
-            <div class="icon-btn-group">
-                <span>⤴</span>
-                <span>⋯</span>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown('<div style="text-align:right" class="ios-icon-group">⤴ ⋯</div>', unsafe_allow_html=True)
 
     st.divider()
 
-    # 备忘录文本编辑区
-    memo_text = st.text_area(
-        label="",
-        placeholder="在这里输入内容，比如：\n联系电话：18125434594",
-        key="memo_input"
-    )
+    # 新建笔记按钮
+    if st.button("➕ 新建备忘录", use_container_width=True):
+        new_id = str(datetime.now().timestamp())
+        data["memos"].append({
+            "id": new_id,
+            "folder": st.session_state.curr_folder,
+            "title": "",
+            "content": "",
+            "create_time": str(datetime.now()),
+            "update_time": str(datetime.now())
+        })
+        save_data(data)
+        st.session_state.curr_memo_id = new_id
+        st.session_state.page = "edit"
+        st.rerun()
 
-    # 识别文本中的手机号
-    phone_pattern = r"1[3-9]\d{9}"
-    phones_found = re.findall(phone_pattern, memo_text)
+    st.subheader(f"📁 {st.session_state.curr_folder}")
 
-    if phones_found:
-        st.info(f"识别到手机号：{', '.join(phones_found)}")
-        # 生成手机号操作按钮
-        for phone in phones_found:
-            if st.button(f"📞 操作号码：{phone}"):
-                st.session_state.selected_phone = phone
-                st.session_state.page_state = "menu"
+    # 展示当前文件夹笔记
+    memo_list = [m for m in data["memos"] if m["folder"] == st.session_state.curr_folder]
+    if not memo_list:
+        st.info("暂无备忘录，点击上方按钮新建")
+    else:
+        for memo in reversed(memo_list):
+            title = memo["title"] if memo["title"] else "无标题备忘录"
+            preview = memo["content"][:30] + "..." if len(memo["content"]) > 30 else memo["content"]
+            st.markdown(f"""
+            <div class="memo-item" onclick="parent.document.querySelector('[data-testid=stButton]').click()">
+                <b>{title}</b><br>
+                <span style="color:#666;font-size:14px">{preview}</span>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button(f"打开_{memo['id']}", key=f"open_{memo['id']}", visible=False):
+                st.session_state.curr_memo_id = memo["id"]
+                st.session_state.page = "edit"
                 st.rerun()
 
+# ===================== 页面2：笔记编辑页（核心编辑界面） =====================
+elif st.session_state.page == "edit":
+    # 查找当前笔记
+    curr_memo = None
+    for m in data["memos"]:
+        if m["id"] == st.session_state.curr_memo_id:
+            curr_memo = m
+            break
+
+    if not curr_memo:
+        st.session_state.page = "list"
+        st.rerun()
+
+    # 顶部导航
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        if st.button("← 返回列表"):
+            # 自动保存
+            save_data(data)
+            st.session_state.page = "list"
+            st.rerun()
+    with col2:
+        st.markdown('<div style="text-align:right" class="ios-icon-group">⤴ ⋯</div>', unsafe_allow_html=True)
+
     st.divider()
 
-    # 底部工具栏
+    # 标题输入
+    note_title = st.text_input("标题", value=curr_memo["title"], label_visibility="collapsed")
+    # 正文编辑
+    note_content = st.text_area("", value=curr_memo["content"], placeholder="开始输入备忘录内容...")
+
+    # 识别手机号
+    phones = PHONE_REG.findall(note_content)
+    if phones:
+        st.success(f"识别到号码：{', '.join(phones)}")
+        for p in phones:
+            if st.button(f"操作号码 {p}", key=f"phone_{p}"):
+                st.session_state["selected_phone"] = p
+                st.session_state.page = "menu"
+                st.rerun()
+
+    # 附件上传
+    st.file_uploader("添加附件/图片", accept_multiple_files=True)
+
+    # 实时保存
+    curr_memo["title"] = note_title
+    curr_memo["content"] = note_content
+    curr_memo["update_time"] = str(datetime.now())
+    save_data(data)
+
+    st.divider()
+
+    # 底部工具栏（苹果原生图标）
     st.markdown("""
-    <div class="bottom-bar">
-        <div class="bottom-icons">
-            <span>☑</span>
-            <span>📎</span>
-            <span>🧭</span>
-        </div>
-        <div class="icon-btn-circle">✏️</div>
+    <div class="bottom-tool">
+        <div class="tool-group">☑ 📎 📍</div>
+        <div class="ios-icon-btn">✏️</div>
     </div>
     """, unsafe_allow_html=True)
 
-# ---------------------- 2. 仿iOS手机号操作菜单 ----------------------
-elif st.session_state.page_state == "menu":
+# ===================== 页面3：手机号操作菜单（仿iOS弹窗） =====================
+elif st.session_state.page == "menu":
+    phone = st.session_state.get("selected_phone", "")
     st.markdown(f"""
-    <div class="phone-menu-container">
-        <div class="phone-header">
-            <div class="phone-avatar">👤</div>
-            <div style="font-size: 20px; font-weight: 500;">{st.session_state.selected_phone}</div>
-        </div>
-        <div class="phone-menu-item">
-            <span>呼叫 {st.session_state.selected_phone}</span>
-            <span>📞</span>
-        </div>
-        <div class="phone-menu-item">
-            <span>发送信息</span>
-            <span>💬</span>
-        </div>
-        <div class="phone-menu-item">
-            <span>FaceTime 通话</span>
-            <span>📹</span>
-        </div>
-        <div class="phone-menu-item">
-            <span>添加到通讯录</span>
-            <span>➕</span>
-        </div>
-        <div class="phone-menu-item">
-            <span>拷贝</span>
-            <span>📋</span>
-        </div>
+    <div class="ios-menu">
+        <div style="padding:12px;font-size:18px;font-weight:bold">{phone}</div>
+        <div class="menu-item">📞 呼叫 {phone}</div>
+        <div class="menu-item">💬 发送信息</div>
+        <div class="menu-item">📹 FaceTime 通话</div>
+        <div class="menu-item">➕ 添加到通讯录</div>
+        <div class="menu-item">📋 拷贝号码</div>
     </div>
     """, unsafe_allow_html=True)
 
-    # 操作按钮
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("← 返回备忘录"):
-            st.session_state.page_state = "memo"
-            st.session_state.selected_phone = None
-            st.rerun()
-    with col2:
-        if st.button("发送信息"):
-            st.session_state.page_state = "sms"
-            st.rerun()
-
-# ---------------------- 3. 仿iMessage短信发送界面 ----------------------
-elif st.session_state.page_state == "sms":
-    st.markdown(f"""
-    <div class="sms-container">
-        <div class="sms-header">
-            <h3>新iMessage信息</h3>
-            <div class="cancel-btn">取消</div>
-        </div>
-        <div class="recipient-box">
-            <div class="recipient-label">收件人：</div>
-            <div class="recipient-number">+86 {st.session_state.selected_phone}</div>
-        </div>
-        <div class="sender-select">
-            <div class="recipient-label">发件人：</div>
-            <div style="display: flex; gap: 12px;">
-                <span style="background-color: #007aff; color: #fff; padding: 4px 8px; border-radius: 4px;">副号1</span>
-                <span>副号</span>
-            </div>
-        </div>
-        <div class="message-input">
-            <span>📷</span>
-            <span>🅰️</span>
-            <input type="text" placeholder="iMessage信息" id="sms_input">
-            <span>🎤</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # 发送/返回按钮
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("← 返回菜单"):
-            st.session_state.page_state = "menu"
-            st.rerun()
-    with col2:
-        if st.button("发送短信"):
-            st.success(f"已向 {st.session_state.selected_phone} 发送短信！")
-            st.session_state.page_state = "memo"
-            st.session_state.selected_phone = None
-            st.rerun()
+    # 功能按钮
+    if st.button("📲 打开系统短信"):
+        # 唤起手机原生短信（sms协议，手机浏览器生效）
+        st.markdown(f'<a href=" " target="_blank">跳转短信</a >', unsafe_allow_html=True)
+    if st.button("返回笔记"):
+        st.session_state.page = "edit"
+        st.rerun()
